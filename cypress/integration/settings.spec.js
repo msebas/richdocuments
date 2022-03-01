@@ -53,7 +53,7 @@ describe('Files default view', function() {
 		cy.screenshot()
 		cy.get('#wopi_url')
 			.clear()
-			.type('https://invalid.example.com<enter>')
+			.type('http://invalid.example.com<enter>')
 		cy.get('#security-warning-state-failure .message')
 			.should('be.visible')
 			.should('contain.text', 'Could not establish connection to the Collabora Online server.')
