@@ -26,8 +26,8 @@ const url = Cypress.config('baseUrl').replace(/\/index.php\/?$/g, '')
 Cypress.env('baseUrl', url)
 
 Cypress.Commands.add('login', (user, password, route = '/apps/files') => {
-	cy.nextcloudUpdateUser(user, password, 'language', 'en')
 	cy.session(user, function () {
+		cy.nextcloudUpdateUser(user, password, 'language', 'en')
 		cy.visit(route)
 		cy.get('input[name=user]').type(user)
 		cy.get('input[name=password]').type(password)
