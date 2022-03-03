@@ -64,6 +64,7 @@ Cypress.Commands.add('nextcloudCreateUser', (user, password) => {
 })
 
 Cypress.Commands.add('nextcloudUpdateUser', (user, password, key, value) => {
+	cy.clearCookies()
 	cy.request({
 		method: 'PUT',
 		url: `${Cypress.env('baseUrl')}/ocs/v2.php/cloud/users/${user}`,
