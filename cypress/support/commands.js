@@ -27,7 +27,6 @@ Cypress.env('baseUrl', url)
 
 Cypress.Commands.add('login', (user, password, route = '/apps/files') => {
 	cy.session(user, function () {
-		cy.nextcloudUpdateUser(user, password, 'language', 'en')
 		cy.visit(route)
 		cy.get('input[name=user]').type(user)
 		cy.get('input[name=password]').type(password)
@@ -61,6 +60,7 @@ Cypress.Commands.add('nextcloudCreateUser', (user, password) => {
 	}).then(response => {
 		cy.log(`Created user ${user}`, response.status)
 	})
+	cy.nextcloudUpdateUser(user, password, 'language', 'en')
 })
 
 Cypress.Commands.add('nextcloudUpdateUser', (user, password, key, value) => {
