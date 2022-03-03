@@ -139,7 +139,7 @@ Cypress.Commands.add('iframe', { prevSubject: 'element' }, $iframe => {
 })
 
 Cypress.Commands.add('nextcloudEnableApp', (appId) => {
-	cy.clearCookies()
+	cy.logout()
 	cy.request({
 		method: 'POST',
 		url: `${Cypress.env('baseUrl')}/ocs/v1.php/cloud/apps/${appId}?format=json`,
@@ -155,6 +155,7 @@ Cypress.Commands.add('nextcloudEnableApp', (appId) => {
 })
 
 Cypress.Commands.add('nextcloudTestingAppConfigSet', (appId, configKey, configValue) => {
+	cy.logout()
 	cy.request({
 		method: 'POST',
 		url: `${Cypress.env('baseUrl')}/ocs/v1.php/apps/testing/api/v1/app/${appId}/${configKey}?format=json`,
