@@ -81,5 +81,13 @@ describe('Files default view', function() {
 			.should('be.visible')
 			.should('contain.text', 'Could not establish connection to the Collabora Online server.')
 		cy.screenshot()
+
+		cy.get('#wopi_url')
+			.clear()
+			.type(collaboraUrl + '{enter}')
+		cy.wait('@updateSettings').its('response.statusCode').should('equal', 200)
+		cy.get('#security-warning-state-ok .message')
+			.should('be.visible')
+			.should('contain.text', 'Collabora Online server is reachable.')
 	})
 })
