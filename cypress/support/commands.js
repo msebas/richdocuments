@@ -21,6 +21,7 @@
  */
 
 import axios from '@nextcloud/axios'
+import './sharing'
 
 const url = Cypress.config('baseUrl').replace(/\/index.php\/?$/g, '')
 Cypress.env('baseUrl', url)
