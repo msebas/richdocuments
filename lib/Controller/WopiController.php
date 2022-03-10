@@ -63,8 +63,6 @@ class WopiController extends Controller {
 	private $urlGenerator;
 	/** @var IConfig */
 	private $config;
-	/** @var AppConfig */
-	private $appConfig;
 	/** @var TokenManager */
 	private $tokenManager;
 	/** @var IUserManager */
@@ -85,35 +83,19 @@ class WopiController extends Controller {
 	private $encryptionManager;
 	/** @var IGroupManager */
 	private $groupManager;
+	private WatermarkService $watermarkService;
 
 	// Signifies LOOL that document has been changed externally in this storage
 	const LOOL_STATUS_DOC_CHANGED = 1010;
 
 	const WOPI_AVATAR_SIZE = 32;
 
-	/**
-	 * @param string $appName
-	 * @param IRequest $request
-	 * @param IRootFolder $rootFolder
-	 * @param IURLGenerator $urlGenerator
-	 * @param IConfig $config
-	 * @param AppConfig $appConfig
-	 * @param TokenManager $tokenManager
-	 * @param IUserManager $userManager
-	 * @param WopiMapper $wopiMapper
-	 * @param ILogger $logger
-	 * @param TemplateManager $templateManager
-	 * @param IShareManager $shareManager
-	 * @param UserScopeService $userScopeService
-	 * @param IEncryptionManager $encryptionManager
-	 */
 	public function __construct(
 		$appName,
 		IRequest $request,
 		IRootFolder $rootFolder,
 		IURLGenerator $urlGenerator,
 		IConfig $config,
-		AppConfig $appConfig,
 		TokenManager $tokenManager,
 		IUserManager $userManager,
 		WopiMapper $wopiMapper,
@@ -130,7 +112,6 @@ class WopiController extends Controller {
 		$this->rootFolder = $rootFolder;
 		$this->urlGenerator = $urlGenerator;
 		$this->config = $config;
-		$this->appConfig = $appConfig;
 		$this->tokenManager = $tokenManager;
 		$this->userManager = $userManager;
 		$this->wopiMapper = $wopiMapper;
@@ -150,14 +131,8 @@ class WopiController extends Controller {
 	 * @NoAdminRequired
 	 * @NoCSRFRequired
 	 * @PublicPage
-	 *
-	 * @param string $fileId
-	 * @param string $access_token
-	 * @return JSONResponse
-	 * @throws InvalidPathException
-	 * @throws NotFoundException
 	 */
-	public function checkFileInfo($fileId, $access_token) {
+	public function checkFileInfo(string $fileId, string $access_token): JSONResponse {
 		try {
 			list($fileId, , $version) = Helper::parseFileId($fileId);
 
@@ -182,69 +157,64 @@ class WopiController extends Controller {
 			return new JSONResponse([], Http::STATUS_FORBIDDEN);
 		}
 
-		$isPublic = empty($wopi->getEditorUid());
 		$guestUserId = 'Guest-' . \OC::$server->getSecureRandom()->generate(8);
 		$user = $this->userManager->get($wopi->getEditorUid());
-		$userDisplayName = $user !== null && !$isPublic ? $user->getDisplayName() : $wopi->getGuestDisplayname();
+		$userDisplayName = $user !== null && !$wopi->isGuest() ? $user->getDisplayName() : $wopi->getGuestDisplayname();
 		$isVersion = $version !== '0';
-		$response = [
+
+		return new JSONResponse([
 			'BaseFileName' => $file->getName(),
 			'Size' => $file->getSize(),
 			'Version' => $version,
-			'UserId' => !$isPublic ? $wopi->getEditorUid() : $guestUserId,
+			'UserId' => !$wopi->isGuest() ? $wopi->getEditorUid() : $guestUserId,
 			'OwnerId' => $wopi->getOwnerUid(),
 			'UserFriendlyName' => $userDisplayName,
 			'UserExtraInfo' => [],
 			'UserCanWrite' => (bool)$wopi->getCanwrite(),
-			'UserCanNotWriteRelative' => $this->encryptionManager->isEnabled() || $isPublic,
+			'UserCanNotWriteRelative' => $this->encryptionManager->isEnabled() || $wopi->isGuest(),
 			'PostMessageOrigin' => $wopi->getServerHost(),
 			'LastModifiedTime' => Helper::toISO8601($file->getMTime()),
 			'SupportsRename' => !$isVersion,
-			'UserCanRename' => !$isPublic && !$isVersion,
+			'UserCanRename' => !$wopi->isGuest() && !$isVersion,
 			'EnableInsertRemoteImage' => true,
 			'EnableShare' => $file->isShareable() && !$isVersion,
-			'HideUserList' => '',
-			'DisablePrint' => $wopi->getHideDownload(),
-			'DisableExport' => $wopi->getHideDownload(),
-			'DisableCopy' => $wopi->getHideDownload(),
-			'HideExportOption' => $wopi->getHideDownload(),
-			'HidePrintOption' => $wopi->getHideDownload(),
 			'DownloadAsPostMessage' => $wopi->getDirect(),
-			...$this->watermarkService->getWopiParams($wopi)
-		];
+			'HideUserList' => '',
 
-		if ($wopi->hasTemplateId()) {
-			$templateUrl = 'index.php/apps/richdocuments/wopi/template/' . $wopi->getTemplateId() . '?access_token=' . $wopi->getToken();
-			$templateUrl = $this->urlGenerator->getAbsoluteURL($templateUrl);
-			$response['TemplateSource'] = $templateUrl;
-		} elseif ($wopi->isTemplateToken()) {
-			// FIXME: Remove backward compatibility layer once TemplateSource is available in all supported Collabora versions
-			$userFolder = $this->rootFolder->getUserFolder($wopi->getOwnerUid());
-			$file = $userFolder->getById($wopi->getTemplateDestination())[0];
-			$response['TemplateSaveAs'] = $file->getName();
-		}
 
-		$user = $this->userManager->get($wopi->getEditorUid());
-		if($user !== null) {
-			$response['UserExtraInfo']['avatar'] = $this->urlGenerator->linkToRouteAbsolute('core.avatar.getAvatar', ['userId' => $wopi->getEditorUid(), 'size' => self::WOPI_AVATAR_SIZE]);
-			if ($this->groupManager->isAdmin($wopi->getEditorUid())) {
-			   $response['UserExtraInfo']['is_admin'] = true;
-			}
-		} else {
-			$response['UserExtraInfo']['avatar'] = $this->urlGenerator->linkToRouteAbsolute('core.GuestAvatar.getAvatar', ['guestName' => urlencode($wopi->getGuestDisplayname()), 'size' => self::WOPI_AVATAR_SIZE]);
-		}
-
-		if ($wopi->isRemoteToken()) {
-			$response = $this->setFederationFileInfo($wopi, $response);
-		}
-
-		return new JSONResponse($response);
+			...$this->templateManager->getWopiParams($wopi),
+			...$this->watermarkService->getWopiParams($wopi),
+			...$this->checkFileInfoUserExtraInfo($wopi),
+			...$this->setFederationFileInfo($wopi),
+			...$this->checkFileInfoHideDownload($wopi),
+		]);
 	}
 
+	private function checkFileInfoUserExtraInfo(Wopi $wopi): array {
+		$user = $this->userManager->get($wopi->getEditorUid());
 
-	private function setFederationFileInfo(Wopi $wopi, $response) {
+		if($user === null) {
+			return [
+				'UserExtraInfo' => [
+					'avatar' => $this->urlGenerator->linkToRouteAbsolute('core.GuestAvatar.getAvatar', ['guestName' => urlencode($wopi->getGuestDisplayname()), 'size' => self::WOPI_AVATAR_SIZE])
+				]
+			];
+		}
+
+		return [
+			'UserExtraInfo' => [
+				'avatar' => $this->urlGenerator->linkToRouteAbsolute('core.avatar.getAvatar', ['userId' => $wopi->getEditorUid(), 'size' => self::WOPI_AVATAR_SIZE]),
+				'is_admin' => $this->groupManager->isAdmin($wopi->getEditorUid()),
+			]
+		];
+	}
+
+	private function setFederationFileInfo(Wopi $wopi): array {
+		if (!$wopi->isRemoteToken()) {
+			return [];
+		}
+		$response = [];
 		$response['UserId'] = 'Guest-' . \OC::$server->getSecureRandom()->generate(8);
-
 		if ($wopi->getTokenType() === Wopi::TOKEN_TYPE_REMOTE_USER) {
 			$remoteUserId = $wopi->getGuestDisplayname();
 			$cloudID = \OC::$server->getCloudIdManager()->resolveCloudId($remoteUserId);
@@ -282,60 +252,14 @@ class WopiController extends Controller {
 		return $response;
 	}
 
-	private function shouldWatermark($isPublic, $userId, $fileId, Wopi $wopi) {
-		if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_enabled', 'no') === 'no') {
-			return false;
-		}
-
-		if ($isPublic) {
-			if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_linkAll', 'no') === 'yes') {
-				return true;
-			}
-			if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_linkRead', 'no') === 'yes' && !$wopi->getCanwrite()) {
-				return true;
-			}
-			if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_linkSecure', 'no') === 'yes' && $wopi->getHideDownload()) {
-				return true;
-			}
-			if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_linkTags', 'no') === 'yes') {
-				$tags = $this->appConfig->getAppValueArray('watermark_linkTagsList');
-				$fileTags = \OC::$server->getSystemTagObjectMapper()->getTagIdsForObjects([$fileId], 'files')[$fileId];
-				foreach ($fileTags as $tagId) {
-					if (in_array($tagId, $tags, true)) {
-						return true;
-					}
-				}
-			}
-		} else {
-			if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_shareAll', 'no') === 'yes') {
-				$files = $this->rootFolder->getUserFolder($userId)->getById($fileId);
-				if (count($files) !== 0 && $files[0]->getOwner()->getUID() !== $userId) {
-					return true;
-				}
-			}
-			if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_shareRead', 'no') === 'yes' && !$wopi->getCanwrite()) {
-				return true;
-			}
-		}
-		if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_allGroups', 'no') === 'yes') {
-			$groups = $this->appConfig->getAppValueArray('watermark_allGroupsList');
-			foreach ($groups as $group) {
-				if (\OC::$server->getGroupManager()->isInGroup($userId, $group)) {
-					return true;
-				}
-			}
-		}
-		if ($this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, 'watermark_allTags', 'no') === 'yes') {
-			$tags = $this->appConfig->getAppValueArray('watermark_allTagsList');
-			$fileTags = \OC::$server->getSystemTagObjectMapper()->getTagIdsForObjects([$fileId], 'files')[$fileId];
-			foreach ($fileTags as $tagId) {
-				if (in_array($tagId, $tags, true)) {
-					return true;
-				}
-			}
-		}
-
-		return false;
+	private function checkFileInfoHideDownload(Wopi $wopi): array {
+		return [
+			'DisablePrint' => $wopi->getHideDownload(),
+			'DisableExport' => $wopi->getHideDownload(),
+			'DisableCopy' => $wopi->getHideDownload(),
+			'HideExportOption' => $wopi->getHideDownload(),
+			'HidePrintOption' => $wopi->getHideDownload(),
+		];
 	}
 
 	/**

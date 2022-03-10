@@ -72,20 +72,11 @@ class PermissionManagerTest extends TestCase {
 			->willReturn('Enabled1|Enabled2|Enabled3');
 
 		$this->groupManager
-			->expects($this->at(0))
+			->expects(self::any())
 			->method('isInGroup')
-			->with('TestUser', 'Enabled1')
-			->willReturn(false);
-		$this->groupManager
-			->expects($this->at(1))
-			->method('isInGroup')
-			->with('TestUser', 'Enabled2')
-			->willReturn(false);
-		$this->groupManager
-			->expects($this->at(2))
-			->method('isInGroup')
-			->with('TestUser', 'Enabled3')
-			->willReturn(false);
+			->willReturnCallback(function($user, $group) {
+				return false;
+			});
 
 		$this->assertFalse($this->permissionManager->isEnabledForUser($user));
 	}
@@ -105,15 +96,14 @@ class PermissionManagerTest extends TestCase {
 			->willReturn('Enabled1|Enabled2|Enabled3');
 
 		$this->groupManager
-			->expects($this->at(0))
+			->expects(self::any())
 			->method('isInGroup')
-			->with('TestUser', 'Enabled1')
-			->willReturn(false);
-		$this->groupManager
-			->expects($this->at(1))
-			->method('isInGroup')
-			->with('TestUser', 'Enabled2')
-			->willReturn(true);
+			->willReturnCallback(function($user, $group) {
+				if ($user === 'TestUser' && $group === 'Enabled2') {
+					return true;
+				}
+				return false;
+			});
 
 		$this->assertTrue($this->permissionManager->isEnabledForUser($user));
 	}
