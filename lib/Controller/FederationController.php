@@ -143,7 +143,7 @@ class FederationController extends OCSController {
 			return new DataResponse([
 				'userId' => $user->getUID(),
 				'displayName' => $user->getDisplayName(),
-				'avatar' => $this->urlGenerator->linkToRouteAbsolute('core.avatar.getAvatar', ['userId' => $wopi->getEditorUid(), 'size' => WopiController::WOPI_AVATAR_SIZE])
+				'avatar' => $this->urlGenerator->linkToRouteAbsolute('core.avatar.getAvatar', ['userId' => $wopi->getEditorUid(), 'size' => WopiControllerTest::WOPI_AVATAR_SIZE])
 			]);
 		} catch (DoesNotExistException $e) {
 			$this->logger->debug('COOL-Federation-Initiator-User: Token ' . $token . 'not found');

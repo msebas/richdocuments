@@ -602,5 +602,7 @@ class TemplateManager {
 				'TemplateSaveAs' => $file->getName()
 			];
 		}
+
+		return [];
 	}
 }
